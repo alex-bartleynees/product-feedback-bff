@@ -1,4 +1,5 @@
 using ProductFeedback.BFF.Auth.Antiforgery;
+using ProductFeedback.BFF.Auth.DataProtection;
 using ProductFeedback.BFF.Auth.OIDC;
 using ProductFeedback.BFF.Auth.TokenManagement;
 
@@ -8,6 +9,7 @@ internal static class AuthModule
 {
     internal static IServiceCollection AddAuth(this WebApplicationBuilder builder)
     {
+        builder.AddRedisDataProtection();
         builder.AddOidcAuthentication();
         builder.Services.AddAuthorizationPolicies();
 
