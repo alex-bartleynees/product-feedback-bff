@@ -49,10 +49,7 @@ internal static class YarpModule
 
     internal static WebApplication UseYarp(this WebApplication app)
     {
-        // Require authentication for all proxied API routes
-        app.MapReverseProxy()
-            .RequireAuthorization("RequireAuthenticatedUserPolicy");
-
+        app.MapReverseProxy();
         return app;
     }
 }

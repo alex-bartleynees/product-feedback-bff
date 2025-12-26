@@ -24,6 +24,30 @@ internal static class OpenIdConnectModule
          options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
          options.Cookie.SameSite = SameSiteMode.Strict;
          options.Cookie.HttpOnly = true;
+
+         // Return 401 for API requests instead of redirecting to login
+         options.Events.OnRedirectToLogin = context =>
+         {
+            if (IsApiRequest(context.Request))
+            {
+               context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+               return Task.CompletedTask;
+            }
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+         };
+
+         // Return 403 for API requests instead of redirecting to access denied
+         options.Events.OnRedirectToAccessDenied = context =>
+         {
+            if (IsApiRequest(context.Request))
+            {
+               context.Response.StatusCode = StatusCodes.Status403Forbidden;
+               return Task.CompletedTask;
+            }
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+         };
       })
       .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options =>
       {
@@ -47,8 +71,24 @@ internal static class OpenIdConnectModule
 
          options.Scope.Clear();
          scopes.ForEach(scope => options.Scope.Add(scope));
+
+         // Return 401 for API requests instead of redirecting to identity provider
+         options.Events.OnRedirectToIdentityProvider = context =>
+         {
+            if (IsApiRequest(context.Request))
+            {
+               context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+               context.HandleResponse();
+            }
+            return Task.CompletedTask;
+         };
       });
       
       return builder.Services;
+   }
+
+   private static bool IsApiRequest(HttpRequest request)
+   {
+      return request.Path.StartsWithSegments("/api");
    }
 }

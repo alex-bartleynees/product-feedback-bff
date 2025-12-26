@@ -19,8 +19,8 @@ internal static class AuthModule
             options.HeaderName = "X-CSRF-TOKEN";
             options.Cookie.Name = "__CSRF";
             options.Cookie.HttpOnly = true;
-            options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.Cookie.SameSite = SameSiteMode.Strict;
         });
 
         // Register token management service

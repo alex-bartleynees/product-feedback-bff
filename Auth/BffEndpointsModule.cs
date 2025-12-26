@@ -32,8 +32,7 @@ internal static class BffEndpointsModule
                 isAuthenticated = true,
                 claims = claims
             });
-        })
-        .RequireAuthorization();
+        });
 
         // GET /bff/login - Initiates OIDC login flow
         bffGroup.MapGet("/login", (HttpContext context, IOptions<OpenIdConnectOptions> oidcOptions) =>
