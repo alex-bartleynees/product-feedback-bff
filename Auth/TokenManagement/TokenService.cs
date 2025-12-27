@@ -11,67 +11,54 @@ public interface ITokenService
     Task<TokenResult> GetUserAccessTokenAsync(HttpContext httpContext);
 }
 
-public class TokenService : ITokenService
+public class TokenService(
+    ILogger<TokenService> logger,
+    TimeProvider timeProvider,
+    IHttpClientFactory httpClientFactory)
+    : ITokenService
 {
-    private readonly ILogger<TokenService> _logger;
-    private readonly TimeProvider _timeProvider;
-    private readonly IHttpClientFactory _httpClientFactory;
-
-    public TokenService(
-        ILogger<TokenService> logger,
-        TimeProvider timeProvider,
-        IHttpClientFactory httpClientFactory)
-    {
-        _logger = logger;
-        _timeProvider = timeProvider;
-        _httpClientFactory = httpClientFactory;
-    }
-
     public async Task<TokenResult> GetUserAccessTokenAsync(HttpContext httpContext)
     {
         if (httpContext.User.Identity?.IsAuthenticated != true)
         {
-            _logger.LogWarning("User is not authenticated, cannot retrieve access token");
+            logger.LogWarning("User is not authenticated, cannot retrieve access token");
             return TokenResult.FromError("User is not authenticated");
         }
 
-        // OIDC with SaveTokens=true stores tokens in the authentication properties
         var accessToken = await httpContext.GetTokenAsync(
             OpenIdConnectDefaults.AuthenticationScheme,
             "access_token");
 
         if (string.IsNullOrEmpty(accessToken))
         {
-            _logger.LogWarning("Access token not found in authentication properties");
+            logger.LogWarning("Access token not found in authentication properties");
             return TokenResult.FromError("Access token not found");
         }
 
-        // Check if token is expired
+        if (await IsTokenExpired(httpContext))
+        {
+            logger.LogInformation("Access token is expired, attempting refresh");
+            var refreshResult = await RefreshTokenAsync(httpContext);
+        
+            if (!refreshResult.IsSuccess)
+            {
+                return refreshResult;
+            }
+
+            accessToken = refreshResult.AccessToken;
+        }
+            
+        return TokenResult.Success(accessToken!);
+    }
+
+    private async Task<bool> IsTokenExpired(HttpContext httpContext)
+    {
         var expiresAt = await httpContext.GetTokenAsync(
             OpenIdConnectDefaults.AuthenticationScheme,
             "expires_at");
-
-        if (!string.IsNullOrEmpty(expiresAt))
-        {
-            if (DateTimeOffset.TryParse(expiresAt, out var expiration))
-            {
-                if (expiration <= _timeProvider.GetUtcNow())
-                {
-                    _logger.LogInformation("Access token is expired, attempting refresh");
-
-                    // Attempt to refresh the token
-                    var refreshResult = await RefreshTokenAsync(httpContext);
-                    if (!refreshResult.IsSuccess)
-                    {
-                        return refreshResult;
-                    }
-
-                    accessToken = refreshResult.AccessToken;
-                }
-            }
-        }
-
-        return TokenResult.Success(accessToken!);
+        return !string.IsNullOrEmpty(expiresAt)
+               && DateTimeOffset.TryParse(expiresAt, out var expiration)
+               && expiration <= timeProvider.GetUtcNow();
     }
 
     private async Task<TokenResult> RefreshTokenAsync(HttpContext httpContext)
@@ -82,7 +69,7 @@ public class TokenService : ITokenService
 
         if (string.IsNullOrEmpty(refreshToken))
         {
-            _logger.LogWarning("Refresh token not found, cannot refresh access token");
+            logger.LogWarning("Refresh token not found, cannot refresh access token");
             return TokenResult.FromError("Refresh token not found");
         }
 
@@ -93,7 +80,7 @@ public class TokenService : ITokenService
 
         if (string.IsNullOrEmpty(oidcOptions.Authority))
         {
-            _logger.LogError("OIDC Authority is not configured");
+            logger.LogError("OIDC Authority is not configured");
             return TokenResult.FromError("OIDC Authority is not configured");
         }
 
@@ -110,13 +97,13 @@ public class TokenService : ITokenService
 
         try
         {
-            using var httpClient = _httpClientFactory.CreateClient();
+            using var httpClient = httpClientFactory.CreateClient();
             var response = await httpClient.PostAsync(tokenEndpoint, requestBody);
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Token refresh failed with status {StatusCode}: {Error}",
+                logger.LogWarning("Token refresh failed with status {StatusCode}: {Error}",
                     response.StatusCode, errorContent);
                 return TokenResult.FromError($"Token refresh failed: {response.StatusCode}");
             }
@@ -125,7 +112,7 @@ public class TokenService : ITokenService
 
             if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
             {
-                _logger.LogWarning("Invalid token response - missing access_token");
+                logger.LogWarning("Invalid token response - missing access_token");
                 return TokenResult.FromError("Invalid token response");
             }
 
@@ -144,7 +131,7 @@ public class TokenService : ITokenService
 
                 if (tokenResponse.ExpiresIn > 0)
                 {
-                    var expiresAt = _timeProvider.GetUtcNow().AddSeconds(tokenResponse.ExpiresIn);
+                    var expiresAt = timeProvider.GetUtcNow().AddSeconds(tokenResponse.ExpiresIn);
                     authResult.Properties.UpdateTokenValue("expires_at", expiresAt.ToString("o"));
                 }
 
@@ -154,16 +141,16 @@ public class TokenService : ITokenService
                     authResult.Principal,
                     authResult.Properties);
 
-                _logger.LogInformation("Successfully refreshed access token");
+                logger.LogInformation("Successfully refreshed access token");
                 return TokenResult.Success(tokenResponse.AccessToken);
             }
 
-            _logger.LogError("Failed to retrieve authentication properties for token update");
+            logger.LogError("Failed to retrieve authentication properties for token update");
             return TokenResult.FromError("Failed to update authentication properties");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Exception during token refresh");
+            logger.LogError(ex, "Exception during token refresh");
             return TokenResult.FromError($"Token refresh exception: {ex.Message}");
         }
     }

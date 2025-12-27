@@ -60,7 +60,7 @@ internal static class OpenIdConnectModule
          options.GetClaimsFromUserInfoEndpoint = openIdConnectOptions.GetClaimsFromUserInfoEndpoint;
          options.MapInboundClaims = openIdConnectOptions.MapInboundClaims;
          options.SaveTokens = openIdConnectOptions.SaveTokens;
-         options.RequireHttpsMetadata = false;
+         options.RequireHttpsMetadata = true;
 
          // Callback paths
          options.CallbackPath = "/signin-oidc";
