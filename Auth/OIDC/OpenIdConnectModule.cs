@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.Extensions.Options;
 
 namespace ProductFeedback.BFF.Auth.OIDC;
 
@@ -8,9 +9,9 @@ internal static class OpenIdConnectModule
    public static IServiceCollection AddOidcAuthentication(this WebApplicationBuilder builder)
    {
       var openIdConnectOptions = builder.Configuration.GetSection(OpenIdConnectOptions.Key)
-                                    .Get<OpenIdConnectOptions>() 
+                                    .Get<OpenIdConnectOptions>()
                                  ?? throw new ArgumentException("OpenId Connect config is missing!");
-      
+
       builder.Services.AddAuthentication(options =>
       {
          options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -83,12 +84,30 @@ internal static class OpenIdConnectModule
             return Task.CompletedTask;
          };
       });
-      
+
+      // Configure Redis ticket store for session persistence across pod restarts
+      builder.Services.AddSingleton<IPostConfigureOptions<CookieAuthenticationOptions>, ConfigureCookieTicketStore>();
+
       return builder.Services;
    }
 
    private static bool IsApiRequest(HttpRequest request)
    {
       return request.Path.StartsWithSegments("/api");
+   }
+}
+
+internal sealed class ConfigureCookieTicketStore : IPostConfigureOptions<CookieAuthenticationOptions>
+{
+   private readonly ITicketStore _ticketStore;
+
+   public ConfigureCookieTicketStore(ITicketStore ticketStore)
+   {
+      _ticketStore = ticketStore;
+   }
+
+   public void PostConfigure(string? name, CookieAuthenticationOptions options)
+   {
+      options.SessionStore = _ticketStore;
    }
 }

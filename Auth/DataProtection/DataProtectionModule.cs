@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using StackExchange.Redis;
 
@@ -36,6 +37,12 @@ internal static class DataProtectionModule
         redisConfig.ConnectRetry = 3;
 
         var redis = ConnectionMultiplexer.Connect(redisConfig);
+
+        // Register Redis connection as singleton for use by other services
+        builder.Services.AddSingleton<IConnectionMultiplexer>(redis);
+
+        // Register the Redis ticket store for cookie authentication
+        builder.Services.AddSingleton<ITicketStore, RedisTicketStore>();
 
         builder.Services.AddDataProtection()
             .PersistKeysToStackExchangeRedis(redis, "DataProtection-Keys")
