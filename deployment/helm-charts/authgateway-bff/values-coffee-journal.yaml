@@ -1,0 +1,82 @@
+config:
+  openIdConnect:
+    clientId: "coffee-journal"
+    redirectUri: "/"
+    oidcCookieSameSite: "Lax" # Use "Lax" for OIDC redirects to work, or "Strict" for maximum security
+    cookieExpireTimeSpanHours: 8760 # 365 days — the app is an installable PWA, keep sessions long-lived
+
+  # Reverse proxy configuration
+  reverseProxy:
+    routes:
+      # Stripe webhook isn't under the {productId} group and must pass through
+      # unmodified/unauthenticated (Stripe verifies its own signature) - it must
+      # be evaluated before billing-route (lower Order = higher priority).
+      billing-webhook-route:
+        clusterId: "payments-gateway"
+        order: -30
+        match:
+          path: "/api/billing/webhook"
+          methods:
+            - "POST"
+      # Billing -> payments-gateway. The gateway requires a {productId} path
+      # segment the frontend never sends, so inject "coffee_journal" on the way
+      # out. Underscore (not hyphen) to match the gateway's product slug.
+      billing-route:
+        clusterId: "payments-gateway"
+        order: -20
+        match:
+          path: "/api/billing/{**remainder}"
+        transforms:
+          - PathPattern: "/api/billing/coffee_journal/{**remainder}"
+      # /api/* -> sync API (path preserved; the API answers on /api/sync directly).
+      api-route:
+        clusterId: "coffee-journal-api"
+        order: -10
+        match:
+          path: "/api/{**remainder}"
+      # Everything else -> the SPA (low priority so /bff/* endpoints and the api
+      # route win; /bff endpoints are app-mapped and take precedence anyway).
+      app-route:
+        clusterId: "coffee-journal-app"
+        order: 100
+        match:
+          path: "/{**catch-all}"
+    clusters:
+      coffee-journal-api:
+        destinations:
+          destination1:
+            address: "http://coffee-journal-api.coffee-journal.svc.cluster.local:3001/"
+      coffee-journal-app:
+        destinations:
+          destination1:
+            address: "http://coffee-journal-app.coffee-journal.svc.cluster.local:8080/"
+      payments-gateway:
+        destinations:
+          destination1:
+            address: "http://payments-gateway.payments-gateway.svc.cluster.local:8080/"
+
+keycloak:
+  secretName: "keycloak-auth"
+  clientSecretKey: "COFFEE_JOURNAL_CLIENT_SECRET"
+  serverUrl: "https://identity.alexbartleynees.com"
+
+# Public ingress. Unlike dopamine-kick — whose SPA has its own ingress and hits
+# the BFF only for /api — the coffee-journal SPA is served *through* this BFF via
+# the YARP app-route catch-all, so the BFF is the sole public entrypoint and owns
+# the ingress. Routes to the BFF service (authgateway-bff-svc:5224).
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: app.coffeesjournal.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: coffee-journal-bff-tls
+      hosts:
+        - app.coffeesjournal.com
