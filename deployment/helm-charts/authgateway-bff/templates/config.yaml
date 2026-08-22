@@ -5,6 +5,11 @@ metadata:
   labels:
     {{- include "authgateway-bff.labels" . | nindent 4 }}
 data:
+  # OpenTelemetry settings
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.telemetry.otlpEndpoint | quote }}
+  OTEL_EXPORTER_OTLP_PROTOCOL: {{ .Values.config.telemetry.otlpProtocol | quote }}
+  OTEL_SERVICE_VERSION: {{ .Values.image.tag | quote }}
+
   # ASP.NET Core settings
   ASPNETCORE_HTTP_PORTS: {{ .Values.config.aspNetCore.httpPorts | quote }}
   ASPNETCORE_URLS: {{ .Values.config.aspNetCore.urls | quote }}

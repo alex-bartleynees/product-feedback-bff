@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.HttpOverrides;
 using AuthGateway.BFF.Auth;
 using AuthGateway.BFF.Common.Clocks;
 using AuthGateway.BFF.RequestProxying;
+using AuthGateway.BFF.Telemetry;
 using IPNetwork = System.Net.IPNetwork;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.AddObservability();
 builder.Services.AddProxy(builder.Configuration);
 builder.AddAuth();
 builder.Services.AddClock();

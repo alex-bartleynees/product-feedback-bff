@@ -136,6 +136,9 @@ keycloak:
 
 # Application configuration
 config:
+  telemetry:
+    otlpEndpoint: "http://my-collector-collector.monitoring.svc.cluster.local:4317"
+    otlpProtocol: "grpc"
   aspNetCore:
     httpPorts: "5224"
     urls: "http://+:5224"
